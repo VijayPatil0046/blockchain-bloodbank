@@ -309,6 +309,31 @@ textarea { min-height: 110px; resize: vertical; }
   gap: 16px;
 }
 
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.inventory-card {
+  border-radius: 20px;
+  padding: 16px;
+  background: linear-gradient(180deg, #f5f8fc, #ffffff);
+  border: 1px solid rgba(23, 50, 77, 0.08);
+  display: grid;
+  gap: 4px;
+}
+
+.inventory-card span,
+.inventory-card small {
+  color: #627489;
+}
+
+.inventory-card strong {
+  font-size: 1.8rem;
+}
+
 .record-card {
   border-radius: 22px;
   padding: 18px;
@@ -331,29 +356,44 @@ textarea { min-height: 110px; resize: vertical; }
   font-weight: 600;
 }
 
-.timeline {
+.chain-strip {
   display: grid;
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
 }
 
-.timeline-item {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-}
-
-.timeline-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #ef4444, #ff7b59);
-  margin-top: 16px;
-}
-
-.timeline-body {
-  border-radius: 20px;
+.chain-block {
+  position: relative;
+  border-radius: 24px;
   padding: 18px;
+  background: linear-gradient(180deg, rgba(20, 38, 68, 0.98), rgba(25, 51, 88, 0.94));
+  color: #f5f8ff;
+  display: grid;
+  gap: 8px;
+}
+
+.chain-block h3,
+.chain-block p {
+  margin: 0;
+}
+
+.chain-cap {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.chain-link {
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  width: 24px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255, 107, 90, 0.7), rgba(82, 177, 255, 0.7));
 }
 
 .tx-hash {
@@ -363,7 +403,9 @@ textarea { min-height: 110px; resize: vertical; }
 .status-0 { background: #fff2c7; color: #8f6500; }
 .status-1 { background: #ddf7e5; color: #1f7c3d; }
 .status-2 { background: #dceafe; color: #2558aa; }
-.status-3 { background: #ffe1e3; color: #ae2430; }
+.status-3 { background: #e7f3ff; color: #2b5fae; }
+.status-4 { background: #dff7e4; color: #1f7c3d; }
+.status-5 { background: #ffe1e3; color: #ae2430; }
 
 .full-width-card { width: 100%; }
 
