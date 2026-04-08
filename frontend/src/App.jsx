@@ -139,7 +139,11 @@ function App() {
   }
 
   async function loadActivity(registry) {
-    const [patientEvents, labEvents, bloodBankEvents, hospitalEvents] = await Promise.all([
+    const [labUpdatedEvents, bloodBankUpdatedEvents, hospitalUpdatedEvents, inventoryEvents, patientEvents, labEvents, bloodBankEvents, hospitalEvents] = await Promise.all([
+      registry.queryFilter(registry.filters.LabUpdated(), 0, "latest"),
+      registry.queryFilter(registry.filters.BloodBankUpdated(), 0, "latest"),
+      registry.queryFilter(registry.filters.HospitalUpdated(), 0, "latest"),
+      registry.queryFilter(registry.filters.InventoryUpdated(), 0, "latest"),
       registry.queryFilter(registry.filters.PatientRegistered(), 0, "latest"),
       registry.queryFilter(registry.filters.LabVerificationCompleted(), 0, "latest"),
       registry.queryFilter(registry.filters.BloodBankAvailabilityChecked(), 0, "latest"),
@@ -147,11 +151,21 @@ function App() {
     ]);
 
     const activity = [
+      ...labUpdatedEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Admin", title: "Lab access updated", requestId: "-", actor: event.args.lab, outcome: event.args.allowed ? "Lab enabled" : "Lab revoked", blockNumber: event.blockNumber, txHash: event.transactionHash })),
+      ...bloodBankUpdatedEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Admin", title: "Blood bank access updated", requestId: "-", actor: event.args.bloodBank, outcome: event.args.allowed ? "Blood bank enabled" : "Blood bank revoked", blockNumber: event.blockNumber, txHash: event.transactionHash })),
+      ...hospitalUpdatedEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Admin", title: "Hospital access updated", requestId: "-", actor: event.args.hospital, outcome: event.args.allowed ? "Hospital enabled" : "Hospital revoked", blockNumber: event.blockNumber, txHash: event.transactionHash })),
+      ...inventoryEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Inventory", title: "Blood inventory updated", requestId: "-", actor: event.args.bloodBank, outcome: `${event.args.bloodGroup} -> ${event.args.unitsAvailable.toString()} units`, blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...patientEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Request", title: "Patient request created", requestId: event.args.requestId.toString(), actor: event.args.patient, outcome: `${event.args.bloodGroup} | ${event.args.unitsRequired.toString()} units`, blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...labEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Lab", title: "Medical validity checked", requestId: event.args.requestId.toString(), actor: event.args.lab, outcome: event.args.approved ? "Verified" : "Rejected", blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...bloodBankEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Blood Bank", title: "Inventory availability checked", requestId: event.args.requestId.toString(), actor: event.args.bloodBank, outcome: event.args.available ? "Available" : "Not available", blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...hospitalEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Hospital", title: "Final hospital decision", requestId: event.args.requestId.toString(), actor: event.args.hospital, outcome: event.args.approved ? "Approved" : "Rejected", blockNumber: event.blockNumber, txHash: event.transactionHash }))
-    ].sort((left, right) => (right.blockNumber - left.blockNumber) || right.txHash.localeCompare(left.txHash));
+    ].sort((left, right) => {
+      if (right.blockNumber !== left.blockNumber) {
+        return right.blockNumber - left.blockNumber;
+      }
+
+      return right.id.localeCompare(left.id);
+    });
 
     setActivityLog(activity);
   }
@@ -384,16 +398,23 @@ function App() {
     if (!activityLog.length) return <p className="empty-state">No blockchain activity yet.</p>;
 
     return (
-      <div className="chain-strip">
-        {activityLog.map((item, index) => (
-          <article className="chain-block" key={item.id}>
-            <div className="chain-cap">Block {item.blockNumber}</div>
-            <h3>{item.stage}</h3>
-            <p>{item.title}</p>
-            <p>Request #{item.requestId}</p>
-            <p>{item.outcome}</p>
-            <p className="tx-hash">{item.txHash}</p>
-            {index < activityLog.length - 1 ? <div className="chain-link" /> : null}
+      <div className="chain-timeline">
+        {activityLog.map((item) => (
+          <article className="chain-row" key={item.id}>
+            <div className="chain-node">
+              <div className="chain-cap">Block {item.blockNumber}</div>
+              <div className="chain-line" />
+            </div>
+            <article className="chain-block">
+              <div className="chain-block-top">
+                <h3>{item.stage}</h3>
+                <span className="header-pill">{item.requestId === "-" ? "System" : `Request #${item.requestId}`}</span>
+              </div>
+              <p className="chain-title">{item.title}</p>
+              <p>Actor: {item.actor}</p>
+              <p>Outcome: {item.outcome}</p>
+              <p className="tx-hash">Tx Hash: {item.txHash}</p>
+            </article>
           </article>
         ))}
       </div>
