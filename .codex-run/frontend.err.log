@@ -1,0 +1,6 @@
+npm warn "127.0.0.1" is being parsed as a normal command line argument.
+npm warn "5173" is being parsed as a normal command line argument.
+npm warn Unknown cli config "--host". This will stop working in the next major version of npm.
+npm warn Unknown cli config "--port". This will stop working in the next major version of npm.
+[33m(!) Could not auto-determine entry point from rollupOptions or html files and there are no explicit optimizeDeps.include patterns. Skipping dependency pre-bundling.[39m
+^Cnpm error A complete log of this run can be found in: C:\Users\Vijay Patil\AppData\Local\npm-cache\_logs\2026-04-08T13_49_30_072Z-debug-0.log

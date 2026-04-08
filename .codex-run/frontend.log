@@ -1,0 +1,13 @@
+
+> blood-donation-blockchain@1.0.0 frontend:dev
+> npm --workspace frontend run dev --host 127.0.0.1 --port 5173
+
+
+> blood-donation-frontend@1.0.0 dev
+> vite 127.0.0.1 5173
+
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m288[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m

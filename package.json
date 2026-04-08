@@ -1,0 +1,19 @@
+{
+  "name": "blood-donation-blockchain",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
+    "frontend:dev": "npm --workspace frontend run dev",
+    "frontend:build": "npm --workspace frontend run build"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.6"
+  }
+}
