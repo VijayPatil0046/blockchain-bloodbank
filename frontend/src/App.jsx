@@ -405,14 +405,14 @@ function App() {
           <div className="panel-topline">
             <div>
               <p className="section-kicker">Smart Panel</p>
-              <h2>Governance control</h2>
+              <h2>Governance Overview</h2>
             </div>
             <span className="signal-dot signal-green">Live</span>
           </div>
-          <p className="panel-copy">Control trusted institutions, inspect lifecycle bottlenecks, and monitor inventory health across the network.</p>
+          <p className="panel-copy">Monitor system health and institutional activity.</p>
           <div className="smart-list">
-            <div><span>Authorized labs</span><strong>{roleFlags.isAdmin ? "Managed here" : "-"}</strong></div>
-            <div><span>Critical unavailable requests</span><strong>{derived.unavailable.length}</strong></div>
+            <div><span>Authorized Labs</span><strong>{roleFlags.isAdmin ? "Managed" : "-"}</strong></div>
+            <div><span>Critical Requests</span><strong>{derived.unavailable.length}</strong></div>
             <div><span>Approved requests</span><strong>{derived.approved.length}</strong></div>
           </div>
         </article>
@@ -425,11 +425,11 @@ function App() {
           <div className="panel-topline">
             <div>
               <p className="section-kicker">Smart Panel</p>
-              <h2>Verification queue</h2>
+              <h2>Verification Queue</h2>
             </div>
             <span className="signal-dot signal-yellow">Pending</span>
           </div>
-          <p className="panel-copy">Focus on validating urgent requests so blood banks only receive medically cleared cases.</p>
+          <p className="panel-copy">Review pending requests and clear them for allocation.</p>
           <div className="smart-list">
             <div><span>Pending verification</span><strong>{derived.pendingLab.length}</strong></div>
             <div><span>Rejected cases</span><strong>{derived.rejected.length}</strong></div>
@@ -444,11 +444,11 @@ function App() {
           <div className="panel-topline">
             <div>
               <p className="section-kicker">Smart Panel</p>
-              <h2>Inventory command</h2>
+              <h2>Allocation Queue</h2>
             </div>
             <span className="signal-dot signal-aqua">Stock</span>
           </div>
-          <p className="panel-copy">Keep live stock aligned with verified demand and reserve units only for approved clinical need.</p>
+          <p className="panel-copy">Maintain stock and allocate units to verified cases.</p>
           <div className="smart-list">
             <div><span>Pending stock checks</span><strong>{derived.pendingBloodBank.length}</strong></div>
             <div><span>O+ units</span><strong>{inventory["O+"] ?? 0}</strong></div>
@@ -463,11 +463,11 @@ function App() {
           <div className="panel-topline">
             <div>
               <p className="section-kicker">Smart Panel</p>
-              <h2>Approval readiness</h2>
+              <h2>Approval Queue</h2>
             </div>
             <span className="signal-dot signal-green">Ready</span>
           </div>
-          <p className="panel-copy">Approve only requests with confirmed medical validity and reserved stock availability.</p>
+          <p className="panel-copy">Review requests with verified need and allocated units.</p>
           <div className="smart-list">
             <div><span>Pending final approvals</span><strong>{derived.pendingHospital.length}</strong></div>
             <div><span>Approved today</span><strong>{derived.approved.length}</strong></div>
@@ -482,11 +482,11 @@ function App() {
           <div className="panel-topline">
             <div>
               <p className="section-kicker">Smart Panel</p>
-              <h2>Your request status</h2>
+              <h2>Request Status</h2>
             </div>
             <span className="signal-dot signal-yellow">Tracking</span>
           </div>
-          <p className="panel-copy">Create a request and follow it through medical review, stock confirmation, and hospital approval.</p>
+          <p className="panel-copy">Create a request and track each approval stage.</p>
           <div className="smart-list">
             <div><span>My requests</span><strong>{derived.myRequests.length}</strong></div>
             <div><span>Approved</span><strong>{derived.myRequests.filter((item) => Number(item.status) === 4).length}</strong></div>
@@ -496,17 +496,17 @@ function App() {
     }
 
     return (
-      <article className="glass-card smart-panel">
-        <div className="panel-topline">
-          <div>
-            <p className="section-kicker">Smart Panel</p>
-            <h2>Observer mode</h2>
+        <article className="glass-card smart-panel">
+          <div className="panel-topline">
+            <div>
+              <p className="section-kicker">Smart Panel</p>
+              <h2>Access Status</h2>
+            </div>
+            <span className="signal-dot signal-red">Limited</span>
           </div>
-          <span className="signal-dot signal-red">Limited</span>
-        </div>
-        <p className="panel-copy">Connect a role-enabled wallet or submit your first request to unlock more operational controls.</p>
-      </article>
-    );
+        <p className="panel-copy">Connect a role-enabled wallet or create a request to continue.</p>
+        </article>
+      );
   }
 
   function renderBlockchain() {
@@ -551,23 +551,23 @@ function App() {
             <div className="panel-topline">
               <div>
                 <p className="section-kicker">System Pulse</p>
-                <h2>Every blood request, verified and coordinated in one trusted flow.</h2>
+                <h2>Operational Control Center</h2>
               </div>
-              <span className="signal-dot signal-green">Active</span>
+              <span className="signal-dot signal-green">System Active</span>
             </div>
-            <p className="hero-text">Bring patient intake, lab validation, blood availability, and hospital approval into a single operational control center.</p>
+            <p className="hero-text">Track and manage the blood request lifecycle in real time.</p>
             <div className="pulse-body">
               <div className="pulse-visual">
                 <div className="pulse-ring pulse-ring-one" />
                 <div className="pulse-ring pulse-ring-two" />
                 <div className="pulse-core">
                   <strong>{requests.length}</strong>
-                  <span>Live Cases</span>
+                  <span>Active Cases</span>
                 </div>
               </div>
               <div className="pulse-stats">
-                <div><span>Active verifications</span><strong>{derived.pendingLab.length + derived.pendingBloodBank.length + derived.pendingHospital.length}</strong></div>
-                <div><span>Approval rate</span><strong>{requests.length ? `${Math.round((derived.approved.length / requests.length) * 100)}%` : "0%"}</strong></div>
+                <div><span>Verification Queue</span><strong>{derived.pendingLab.length + derived.pendingBloodBank.length}</strong></div>
+                <div><span>Approval Rate</span><strong>{requests.length ? `${Math.round((derived.approved.length / requests.length) * 100)}%` : "0%"}</strong></div>
               </div>
             </div>
           </article>
@@ -579,26 +579,26 @@ function App() {
                 <h2>{shortAddress(account)}</h2>
               </div>
             </div>
-            <p className="hero-sidecopy">Current role: {formatRole(role)}</p>
+            <p className="hero-sidecopy">Current Role: {formatRole(role)}</p>
             <div className="role-chip-row">
               {Object.entries(roleFlags).filter(([, value]) => value).map(([key]) => <span className="role-chip" key={key}>{key.replace("is", "")}</span>)}
             </div>
-            <button className="secondary-button subtle-button" onClick={refreshData} disabled={!contract}>Refresh Dashboard</button>
+            <button className="secondary-button subtle-button" onClick={refreshData} disabled={!contract}>Reconnect Wallet</button>
           </article>
 
           <article className="glass-card flow-card">
             <div className="panel-topline">
               <div>
-                <p className="section-kicker">Request Flow Timeline</p>
-                <h2>Operational pipeline</h2>
+                <p className="section-kicker">Request Pipeline</p>
+                <h2>End-to-end flow from intake to final approval</h2>
               </div>
             </div>
             <div className="flow-track">
               {[
-                { label: "Patient", count: requests.length, tone: "signal-aqua" },
-                { label: "Lab", count: derived.pendingLab.length, tone: "signal-yellow" },
-                { label: "Blood Bank", count: derived.pendingBloodBank.length, tone: "signal-yellow" },
-                { label: "Hospital", count: derived.pendingHospital.length, tone: "signal-green" }
+                { label: "Patient Intake", count: requests.length, tone: "signal-aqua" },
+                { label: "Lab Verification", count: derived.pendingLab.length, tone: "signal-yellow" },
+                { label: "Blood Allocation", count: derived.pendingBloodBank.length, tone: "signal-yellow" },
+                { label: "Hospital Approval", count: derived.pendingHospital.length, tone: "signal-green" }
               ].map((item, index) => (
                 <div className="flow-stage" key={item.label}>
                   <div className={`flow-dot ${item.tone}`} />
@@ -613,8 +613,8 @@ function App() {
           <article className="glass-card activity-card">
             <div className="panel-topline">
               <div>
-                <p className="section-kicker">Live Activity Feed</p>
-                <h2>Recent network actions</h2>
+                <p className="section-kicker">Live Activity</p>
+                <h2>Recent actions across the network</h2>
               </div>
             </div>
             <div className="activity-feed">
@@ -807,7 +807,7 @@ function App() {
           ))}
         </div>
         <div className="topbar-actions">
-          <span className="wallet-pill">{shortAddress(account)}</span>
+          <span className="wallet-pill">Wallet {shortAddress(account)}</span>
           <span className="wallet-pill">{formatRole(role)}</span>
           <span className="icon-pill">••</span>
           <button className="avatar-pill" onClick={connectWallet} type="button">{account ? "Reconnect Wallet" : "Connect"}</button>
@@ -817,16 +817,16 @@ function App() {
       <main className="workspace">
         <header className="workspace-header">
           <div><p className="section-kicker">Role Dashboard</p><h1>{pageMeta[activePage].label}</h1></div>
-          <div className="header-actions"><span className="network-chip">Local Hardhat</span><span className="contract-chip">{shortAddress(contractAddress)}</span><span className="status-inline">{statusMessage}</span></div>
+          <div className="header-actions"><span className="network-chip">Local Hardhat</span><span className="contract-chip">{shortAddress(contractAddress)}</span><span className="status-inline">Wallet detected</span></div>
         </header>
         {renderPage()}
       </main>
 
       <div className="floating-actions glass-card">
         <p className="section-kicker">Quick Actions</p>
-        <button className="fab-action" onClick={() => navigateTo("patient")} type="button">Create request</button>
-        <button className="fab-action" onClick={() => navigateTo("lab")} type="button">Verify</button>
-        <button className="fab-action" onClick={() => navigateTo("hospital")} type="button">Approve</button>
+        <button className="fab-action" onClick={() => navigateTo("patient")} type="button">Create Request</button>
+        <button className="fab-action" onClick={() => navigateTo("lab")} type="button">Verify Request</button>
+        <button className="fab-action" onClick={() => navigateTo("hospital")} type="button">Approve Request</button>
       </div>
     </div>
   );
