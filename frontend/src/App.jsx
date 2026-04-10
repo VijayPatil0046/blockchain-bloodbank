@@ -63,6 +63,10 @@ function formatRole(role) {
   return role === "Observer" ? "Observer" : role;
 }
 
+function pageTitle(page) {
+  return page === "bloodbank" ? "Blood Bank" : pageMeta[page]?.label || "Overview";
+}
+
 function App() {
   const [account, setAccount] = useState("");
   const [provider, setProvider] = useState(null);
@@ -394,6 +398,117 @@ function App() {
     );
   }
 
+  function renderSmartPanel() {
+    if (role === "Admin") {
+      return (
+        <article className="glass-card smart-panel">
+          <div className="panel-topline">
+            <div>
+              <p className="section-kicker">Smart Panel</p>
+              <h2>Governance control</h2>
+            </div>
+            <span className="signal-dot signal-green">Live</span>
+          </div>
+          <p className="panel-copy">Control trusted institutions, inspect lifecycle bottlenecks, and monitor inventory health across the network.</p>
+          <div className="smart-list">
+            <div><span>Authorized labs</span><strong>{roleFlags.isAdmin ? "Managed here" : "-"}</strong></div>
+            <div><span>Critical unavailable requests</span><strong>{derived.unavailable.length}</strong></div>
+            <div><span>Approved requests</span><strong>{derived.approved.length}</strong></div>
+          </div>
+        </article>
+      );
+    }
+
+    if (role === "Lab") {
+      return (
+        <article className="glass-card smart-panel">
+          <div className="panel-topline">
+            <div>
+              <p className="section-kicker">Smart Panel</p>
+              <h2>Verification queue</h2>
+            </div>
+            <span className="signal-dot signal-yellow">Pending</span>
+          </div>
+          <p className="panel-copy">Focus on validating urgent requests so blood banks only receive medically cleared cases.</p>
+          <div className="smart-list">
+            <div><span>Pending verification</span><strong>{derived.pendingLab.length}</strong></div>
+            <div><span>Rejected cases</span><strong>{derived.rejected.length}</strong></div>
+          </div>
+        </article>
+      );
+    }
+
+    if (role === "Blood Bank") {
+      return (
+        <article className="glass-card smart-panel">
+          <div className="panel-topline">
+            <div>
+              <p className="section-kicker">Smart Panel</p>
+              <h2>Inventory command</h2>
+            </div>
+            <span className="signal-dot signal-aqua">Stock</span>
+          </div>
+          <p className="panel-copy">Keep live stock aligned with verified demand and reserve units only for approved clinical need.</p>
+          <div className="smart-list">
+            <div><span>Pending stock checks</span><strong>{derived.pendingBloodBank.length}</strong></div>
+            <div><span>O+ units</span><strong>{inventory["O+"] ?? 0}</strong></div>
+          </div>
+        </article>
+      );
+    }
+
+    if (role === "Hospital") {
+      return (
+        <article className="glass-card smart-panel">
+          <div className="panel-topline">
+            <div>
+              <p className="section-kicker">Smart Panel</p>
+              <h2>Approval readiness</h2>
+            </div>
+            <span className="signal-dot signal-green">Ready</span>
+          </div>
+          <p className="panel-copy">Approve only requests with confirmed medical validity and reserved stock availability.</p>
+          <div className="smart-list">
+            <div><span>Pending final approvals</span><strong>{derived.pendingHospital.length}</strong></div>
+            <div><span>Approved today</span><strong>{derived.approved.length}</strong></div>
+          </div>
+        </article>
+      );
+    }
+
+    if (role === "Patient") {
+      return (
+        <article className="glass-card smart-panel">
+          <div className="panel-topline">
+            <div>
+              <p className="section-kicker">Smart Panel</p>
+              <h2>Your request status</h2>
+            </div>
+            <span className="signal-dot signal-yellow">Tracking</span>
+          </div>
+          <p className="panel-copy">Create a request and follow it through medical review, stock confirmation, and hospital approval.</p>
+          <div className="smart-list">
+            <div><span>My requests</span><strong>{derived.myRequests.length}</strong></div>
+            <div><span>Approved</span><strong>{derived.myRequests.filter((item) => Number(item.status) === 4).length}</strong></div>
+          </div>
+        </article>
+      );
+    }
+
+    return (
+      <article className="glass-card smart-panel">
+        <div className="panel-topline">
+          <div>
+            <p className="section-kicker">Smart Panel</p>
+            <h2>Observer mode</h2>
+          </div>
+          <span className="signal-dot signal-red">Limited</span>
+        </div>
+        <p className="panel-copy">Connect a role-enabled wallet or submit your first request to unlock more operational controls.</p>
+      </article>
+    );
+  }
+
   function renderBlockchain() {
     if (!activityLog.length) return <p className="empty-state">No blockchain activity yet.</p>;
 
@@ -422,49 +537,103 @@ function App() {
   }
 
   function renderOverview() {
-    const cards =
-      role === "Admin"
-        ? [
-            { label: "Total Requests", value: requests.length, tone: "warm" },
-            { label: "Pending Lab", value: derived.pendingLab.length, tone: "gold" },
-            { label: "Pending Blood Bank", value: derived.pendingBloodBank.length, tone: "mint" },
-            { label: "Pending Hospital", value: derived.pendingHospital.length, tone: "sky" }
-          ]
-        : role === "Patient"
-          ? [
-              { label: "My Requests", value: derived.myRequests.length, tone: "warm" },
-              { label: "Approved", value: derived.myRequests.filter((item) => Number(item.status) === 4).length, tone: "sky" },
-              { label: "Awaiting Review", value: derived.myRequests.filter((item) => [0, 1, 3].includes(Number(item.status))).length, tone: "mint" }
-            ]
-          : role === "Lab"
-            ? [{ label: "Pending Review", value: derived.pendingLab.length, tone: "gold" }]
-            : role === "Blood Bank"
-              ? [{ label: "Pending Availability Checks", value: derived.pendingBloodBank.length, tone: "mint" }]
-              : role === "Hospital"
-                ? [{ label: "Pending Final Approvals", value: derived.pendingHospital.length, tone: "sky" }]
-                : [{ label: "Requests On Chain", value: requests.length, tone: "warm" }];
+    const cards = [
+      { label: "Total Requests", value: requests.length, tone: "warm" },
+      { label: "Pending Lab", value: derived.pendingLab.length, tone: "gold" },
+      { label: "Pending Blood Bank", value: derived.pendingBloodBank.length, tone: "mint" },
+      { label: "Pending Hospital", value: derived.pendingHospital.length, tone: "sky" }
+    ];
 
     return (
       <>
-        <section className="hero-surface">
-          <div className="hero-copyblock">
-            <p className="eyebrow">Blood Donation Chain</p>
-            <h1>Connected care for blood requests, verification, and approval.</h1>
-            <p className="hero-text">Manage patient intake, lab review, blood availability, and hospital decisions in one clear operational flow.</p>
-          </div>
-          <div className="hero-sidecard">
-            <p className="mini-label">Connected wallet</p>
-            <h3>{shortAddress(account)}</h3>
+        <section className="bento-grid">
+          <article className="glass-card pulse-card">
+            <div className="panel-topline">
+              <div>
+                <p className="section-kicker">System Pulse</p>
+                <h2>Every blood request, verified and coordinated in one trusted flow.</h2>
+              </div>
+              <span className="signal-dot signal-green">Active</span>
+            </div>
+            <p className="hero-text">Bring patient intake, lab validation, blood availability, and hospital approval into a single operational control center.</p>
+            <div className="pulse-body">
+              <div className="pulse-visual">
+                <div className="pulse-ring pulse-ring-one" />
+                <div className="pulse-ring pulse-ring-two" />
+                <div className="pulse-core">
+                  <strong>{requests.length}</strong>
+                  <span>Live Cases</span>
+                </div>
+              </div>
+              <div className="pulse-stats">
+                <div><span>Active verifications</span><strong>{derived.pendingLab.length + derived.pendingBloodBank.length + derived.pendingHospital.length}</strong></div>
+                <div><span>Approval rate</span><strong>{requests.length ? `${Math.round((derived.approved.length / requests.length) * 100)}%` : "0%"}</strong></div>
+              </div>
+            </div>
+          </article>
+
+          <article className="glass-card wallet-spotlight">
+            <div className="panel-topline">
+              <div>
+                <p className="section-kicker">Connected Wallet</p>
+                <h2>{shortAddress(account)}</h2>
+              </div>
+            </div>
             <p className="hero-sidecopy">Current role: {formatRole(role)}</p>
             <div className="role-chip-row">
               {Object.entries(roleFlags).filter(([, value]) => value).map(([key]) => <span className="role-chip" key={key}>{key.replace("is", "")}</span>)}
             </div>
             <button className="secondary-button subtle-button" onClick={refreshData} disabled={!contract}>Refresh Dashboard</button>
-          </div>
+          </article>
+
+          <article className="glass-card flow-card">
+            <div className="panel-topline">
+              <div>
+                <p className="section-kicker">Request Flow Timeline</p>
+                <h2>Operational pipeline</h2>
+              </div>
+            </div>
+            <div className="flow-track">
+              {[
+                { label: "Patient", count: requests.length, tone: "signal-aqua" },
+                { label: "Lab", count: derived.pendingLab.length, tone: "signal-yellow" },
+                { label: "Blood Bank", count: derived.pendingBloodBank.length, tone: "signal-yellow" },
+                { label: "Hospital", count: derived.pendingHospital.length, tone: "signal-green" }
+              ].map((item, index) => (
+                <div className="flow-stage" key={item.label}>
+                  <div className={`flow-dot ${item.tone}`} />
+                  <strong>{item.count}</strong>
+                  <span>{item.label}</span>
+                  {index < 3 ? <div className="flow-line" /> : null}
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="glass-card activity-card">
+            <div className="panel-topline">
+              <div>
+                <p className="section-kicker">Live Activity Feed</p>
+                <h2>Recent network actions</h2>
+              </div>
+            </div>
+            <div className="activity-feed">
+              {activityLog.slice(0, 5).map((item) => (
+                <div className="activity-item" key={item.id}>
+                  <span className="activity-stage">{item.stage}</span>
+                  <p>{item.title}</p>
+                  <small>{item.requestId === "-" ? item.outcome : `Request #${item.requestId} • ${item.outcome}`}</small>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          {renderSmartPanel()}
         </section>
+
         <section className="summary-grid">
           {cards.map((card) => (
-            <article className={`summary-card tone-${card.tone}`} key={card.label}>
+            <article className={`summary-card glass-card tone-${card.tone}`} key={card.label}>
               <p>{card.label}</p>
               <strong>{card.value}</strong>
             </article>
@@ -619,41 +788,46 @@ function App() {
   }
 
   return (
-    <div className="dashboard-shell">
-      <aside className="sidebar">
-        <div className="brand-block">
-          <p className="eyebrow">Blood Donation Chain</p>
-          <h2>BloodFlow Hub</h2>
-          <p className="sidebar-copy">A unified workspace for request intake, verification, blood availability, and final hospital clearance.</p>
-        </div>
-        <div className="wallet-panel">
-          <div><p className="mini-label">Wallet</p><h3>{shortAddress(account)}</h3></div>
-          <p className="wallet-role">Current role: {formatRole(role)}</p>
-          <div className="flag-grid">
-            {["Admin", "Patient", "Lab", "Blood Bank", "Hospital"].map((label) => {
-              const key = label === "Blood Bank" ? "isBloodBank" : `is${label.replace(" ", "")}`;
-              return <span className={`flag-pill ${roleFlags[key] ? "active-flag" : ""}`} key={label}>{label}</span>;
-            })}
+    <div className="control-shell">
+      <div className="ambient-orb ambient-orb-one" />
+      <div className="ambient-orb ambient-orb-two" />
+      <header className="topbar glass-card">
+        <div className="topbar-brand">
+          <div className="logo-mark">B</div>
+          <div>
+            <p className="eyebrow">Blood Donation Chain</p>
+            <h2>BloodFlow Hub</h2>
           </div>
-          <button className="primary-button connect-button" onClick={connectWallet}>{account ? "Reconnect Wallet" : "Connect MetaMask"}</button>
-          <p className="status-banner">{statusMessage}</p>
         </div>
-        <nav className="nav-stack">
+        <div className="topbar-center">
           {availablePages.map((pageId) => (
-            <button className={`nav-item ${activePage === pageId ? "nav-item-active" : ""}`} key={pageId} onClick={() => navigateTo(pageId)} type="button">
-              <span>{pageMeta[pageId].label}</span>
-              <small>{pageMeta[pageId].hint}</small>
+            <button className={`topbar-tab ${activePage === pageId ? "topbar-tab-active" : ""}`} key={pageId} onClick={() => navigateTo(pageId)} type="button">
+              {pageTitle(pageId)}
             </button>
           ))}
-        </nav>
-      </aside>
+        </div>
+        <div className="topbar-actions">
+          <span className="wallet-pill">{shortAddress(account)}</span>
+          <span className="wallet-pill">{formatRole(role)}</span>
+          <span className="icon-pill">••</span>
+          <button className="avatar-pill" onClick={connectWallet} type="button">{account ? "Reconnect Wallet" : "Connect"}</button>
+        </div>
+      </header>
+
       <main className="workspace">
         <header className="workspace-header">
           <div><p className="section-kicker">Role Dashboard</p><h1>{pageMeta[activePage].label}</h1></div>
-          <div className="header-actions"><span className="network-chip">Local Hardhat</span><span className="contract-chip">{shortAddress(contractAddress)}</span></div>
+          <div className="header-actions"><span className="network-chip">Local Hardhat</span><span className="contract-chip">{shortAddress(contractAddress)}</span><span className="status-inline">{statusMessage}</span></div>
         </header>
         {renderPage()}
       </main>
+
+      <div className="floating-actions glass-card">
+        <p className="section-kicker">Quick Actions</p>
+        <button className="fab-action" onClick={() => navigateTo("patient")} type="button">Create request</button>
+        <button className="fab-action" onClick={() => navigateTo("lab")} type="button">Verify</button>
+        <button className="fab-action" onClick={() => navigateTo("hospital")} type="button">Approve</button>
+      </div>
     </div>
   );
 }
