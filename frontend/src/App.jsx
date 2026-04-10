@@ -52,7 +52,10 @@ function extractAddress(value) {
 }
 
 function getErrorMessage(error) {
-  return error?.shortMessage || error?.reason || error?.info?.error?.message || error?.error?.message || error?.message || "Transaction failed.";
+  const nestedMessage = error?.data?.message || error?.info?.error?.message || error?.error?.message;
+  const revertMatch = nestedMessage?.match(/reverted with reason string ['\"]([^'\"]+)['\"]/i);
+
+  return error?.shortMessage || error?.reason || revertMatch?.[1] || nestedMessage || error?.message || "Transaction failed.";
 }
 
 function shortAddress(value) {
@@ -341,6 +344,17 @@ function App() {
   async function submitBloodBankReview(event) {
     event.preventDefault();
     try {
+      const request = requests.find((item) => item.id.toString() === String(bloodBankReviewForm.requestId));
+      if (bloodBankReviewForm.approved && request) {
+        const availableUnits = Number(inventory[request.bloodGroup] ?? 0);
+        const requiredUnits = Number(request.unitsRequired);
+
+        if (availableUnits < requiredUnits) {
+          setStatusMessage(`Not enough units in inventory for ${request.bloodGroup}. Need ${requiredUnits}, have ${availableUnits}.`);
+          return;
+        }
+      }
+
       const registry = await getWriteContract();
       const tx = await registry.checkAvailability(Number(bloodBankReviewForm.requestId), bloodBankReviewForm.approved, bloodBankReviewForm.remarks);
       setStatusMessage("Checking blood availability...");
@@ -537,7 +551,7 @@ function App() {
   }
 
   function renderOverview() {
-    const cards = [
+    const walletStats = [
       { label: "Total Requests", value: requests.length, tone: "warm" },
       { label: "Pending Lab", value: derived.pendingLab.length, tone: "gold" },
       { label: "Pending Blood Bank", value: derived.pendingBloodBank.length, tone: "mint" },
@@ -572,18 +586,35 @@ function App() {
             </div>
           </article>
 
-          <article className="glass-card wallet-spotlight">
-            <div className="panel-topline">
-              <div>
+          <article className="glass-card wallet-smart-panel">
+            <div className="wallet-panel-top">
+              <div className="wallet-panel-heading">
                 <p className="section-kicker">Connected Wallet</p>
                 <h2>{shortAddress(account)}</h2>
+                <p className="wallet-panel-copy">{account || "Wallet not connected"}</p>
               </div>
+              <button className="secondary-button subtle-button wallet-reconnect" onClick={connectWallet}>
+                Reconnect Wallet
+              </button>
             </div>
-            <p className="hero-sidecopy">Current Role: {formatRole(role)}</p>
-            <div className="role-chip-row">
-              {Object.entries(roleFlags).filter(([, value]) => value).map(([key]) => <span className="role-chip" key={key}>{key.replace("is", "")}</span>)}
+
+            <div className="wallet-panel-meta">
+              <span className="wallet-role-badge">{formatRole(role)}</span>
+              <span className="wallet-meta-note">Current role</span>
             </div>
-            <button className="secondary-button subtle-button" onClick={refreshData} disabled={!contract}>Reconnect Wallet</button>
+
+            <div className="wallet-panel-divider" />
+
+            <div className="wallet-panel-stats">
+              {walletStats.map((card, index) => (
+                <article className={`wallet-stat-card tone-${card.tone}`} key={card.label} style={{ animationDelay: `${index * 70}ms` }}>
+                  <strong>{card.value}</strong>
+                  <span>{card.label}</span>
+                </article>
+              ))}
+            </div>
+
+            <div className="wallet-panel-footer">System synced • Last updated just now</div>
           </article>
 
           <article className="glass-card flow-card">
@@ -629,15 +660,6 @@ function App() {
           </article>
 
           {renderSmartPanel()}
-        </section>
-
-        <section className="summary-grid">
-          {cards.map((card) => (
-            <article className={`summary-card glass-card tone-${card.tone}`} key={card.label}>
-              <p>{card.label}</p>
-              <strong>{card.value}</strong>
-            </article>
-          ))}
         </section>
       </>
     );
