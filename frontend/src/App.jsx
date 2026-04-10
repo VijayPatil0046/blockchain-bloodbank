@@ -449,8 +449,8 @@ function App() {
         <section className="hero-surface">
           <div className="hero-copyblock">
             <p className="eyebrow">Blood Donation Chain</p>
-            <h1>A realistic blood request workflow with role-specific workspaces.</h1>
-            <p className="hero-text">This product helps patients, labs, blood banks, hospitals, and admins coordinate a blood request from medical validation to inventory confirmation and final approval.</p>
+            <h1>Connected care for blood requests, verification, and approval.</h1>
+            <p className="hero-text">Manage patient intake, lab review, blood availability, and hospital decisions in one clear operational flow.</p>
           </div>
           <div className="hero-sidecard">
             <p className="mini-label">Connected wallet</p>
@@ -623,8 +623,8 @@ function App() {
       <aside className="sidebar">
         <div className="brand-block">
           <p className="eyebrow">Blood Donation Chain</p>
-          <h2>Care Network</h2>
-          <p className="sidebar-copy">A modern, multi-role blood request workflow with verifiable lifecycle tracking.</p>
+          <h2>BloodFlow Hub</h2>
+          <p className="sidebar-copy">A unified workspace for request intake, verification, blood availability, and final hospital clearance.</p>
         </div>
         <div className="wallet-panel">
           <div><p className="mini-label">Wallet</p><h3>{shortAddress(account)}</h3></div>

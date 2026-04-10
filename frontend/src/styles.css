@@ -47,6 +47,11 @@ button { cursor: pointer; }
   color: #f5f8ff;
 }
 
+.brand-block {
+  align-self: start;
+  padding-bottom: 6px;
+}
+
 .brand-block h2,
 .wallet-panel h3,
 .workspace-header h1,
