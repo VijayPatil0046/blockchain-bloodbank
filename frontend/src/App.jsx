@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { ethers } from "ethers";
-import { bloodGroups, contractAbi, contractAddress, statusLabels } from "./contract";
+import { bloodGroups, contractAbi, contractAddress, donationStatusLabels, statusLabels } from "./contract";
 
-const emptyPatientForm = { patientName: "", age: "", bloodGroup: "O+", unitsRequired: "", contactReference: "", medicalReference: "" };
+const emptyPatientForm = { patientName: "", bloodGroup: "O+", unitsRequired: "", hospitalName: "", urgencyLevel: "Normal" };
+const emptyDonorForm = { donorName: "", bloodGroup: "O+", unitsDonated: "", donationDate: "" };
 const emptyRoleForm = { address: "", allowed: true };
 const emptyInventoryForm = { bloodGroup: "O+", unitsAvailable: "" };
 const emptyReviewForm = { requestId: "", approved: true, remarks: "" };
@@ -11,7 +12,8 @@ const addressPattern = /0x[a-fA-F0-9]{40}/;
 
 const rolePages = {
   Admin: ["overview", "admin", "lifecycle", "blockchain"],
-  Patient: ["overview", "patient", "blockchain"],
+  Donor: ["donor"],
+  Patient: ["patient"],
   Lab: ["overview", "lab", "blockchain"],
   "Blood Bank": ["overview", "bloodbank", "blockchain"],
   Hospital: ["overview", "hospital", "blockchain"],
@@ -22,6 +24,7 @@ const pageMeta = {
   overview: { label: "Overview", hint: "Role snapshot" },
   admin: { label: "Admin", hint: "Access and oversight" },
   lifecycle: { label: "Lifecycle", hint: "All requests" },
+  donor: { label: "Donor", hint: "Donate blood" },
   patient: { label: "Patient", hint: "Create and track" },
   lab: { label: "Lab", hint: "Medical verification" },
   bloodbank: { label: "Blood Bank", hint: "Inventory and availability" },
@@ -33,6 +36,7 @@ const pagePaths = {
   overview: "/",
   admin: "/admin",
   lifecycle: "/lifecycle",
+  donor: "/donor",
   patient: "/patient",
   lab: "/lab",
   bloodbank: "/blood-bank",
@@ -70,17 +74,65 @@ function pageTitle(page) {
   return page === "bloodbank" ? "Blood Bank" : pageMeta[page]?.label || "Overview";
 }
 
+function patientStatusLabel(status) {
+  const value = Number(status);
+  if (value === 1 || value === 3) return "Verified";
+  if (value === 4) return "Approved";
+  if (value === 2 || value === 5) return "Rejected";
+  return "Pending";
+}
+
+function donationStatusLabel(status) {
+  return donationStatusLabels[Number(status)] || "Available";
+}
+
+function allocationStatusLabel(allocation) {
+  return allocation.used ? "Used" : "Assigned";
+}
+
+function normalizeDonation(donation) {
+  return {
+    id: donation.id ?? donation[0],
+    donor: donation.donor ?? donation[1],
+    donorName: donation.donorName ?? donation[2],
+    bloodGroup: donation.bloodGroup ?? donation[3],
+    unitsDonated: donation.unitsDonated ?? donation[4],
+    unitsAvailable: donation.unitsAvailable ?? donation[5],
+    bloodBank: donation.bloodBank ?? donation[6],
+    donationDate: donation.donationDate ?? donation[7],
+    createdAt: donation.createdAt ?? donation[8],
+    status: donation.status ?? donation[9]
+  };
+}
+
+function normalizeAllocation(allocation) {
+  return {
+    donationId: allocation.donationId ?? allocation[0],
+    requestId: allocation.requestId ?? allocation[1],
+    bloodBank: allocation.bloodBank ?? allocation[2],
+    patient: allocation.patient ?? allocation[3],
+    unitsAllocated: allocation.unitsAllocated ?? allocation[4],
+    allocatedAt: allocation.allocatedAt ?? allocation[5],
+    used: Boolean(allocation.used ?? allocation[6])
+  };
+}
+
 function App() {
   const [account, setAccount] = useState("");
   const [provider, setProvider] = useState(null);
   const [contract, setContract] = useState(null);
   const [role, setRole] = useState("Observer");
   const [activePage, setActivePage] = useState(() => getPageFromPath(window.location.pathname));
-  const [roleFlags, setRoleFlags] = useState({ isAdmin: false, isPatient: false, isLab: false, isBloodBank: false, isHospital: false });
+  const [roleFlags, setRoleFlags] = useState({ isAdmin: false, isDonor: false, isPatient: false, isLab: false, isBloodBank: false, isHospital: false });
   const [requests, setRequests] = useState([]);
+  const [donations, setDonations] = useState([]);
+  const [bloodBanks, setBloodBanks] = useState([]);
+  const [donationAllocationsById, setDonationAllocationsById] = useState({});
   const [activityLog, setActivityLog] = useState([]);
   const [inventory, setInventory] = useState({});
   const [statusMessage, setStatusMessage] = useState("Connect MetaMask to begin.");
+  const [donorForm, setDonorForm] = useState(emptyDonorForm);
+  const [donorRoleForm, setDonorRoleForm] = useState(emptyRoleForm);
   const [patientForm, setPatientForm] = useState(emptyPatientForm);
   const [labForm, setLabForm] = useState(emptyRoleForm);
   const [bloodBankRoleForm, setBloodBankRoleForm] = useState(emptyRoleForm);
@@ -127,8 +179,11 @@ function App() {
     setContract(null);
     setRole("Observer");
     navigateTo("overview", true);
-    setRoleFlags({ isAdmin: false, isPatient: false, isLab: false, isBloodBank: false, isHospital: false });
+    setRoleFlags({ isAdmin: false, isDonor: false, isPatient: false, isLab: false, isBloodBank: false, isHospital: false });
     setRequests([]);
+    setDonations([]);
+    setBloodBanks([]);
+    setDonorRoleForm(emptyRoleForm);
     setActivityLog([]);
     setInventory({});
     setStatusMessage(message);
@@ -138,20 +193,62 @@ function App() {
     return new ethers.Contract(contractAddress, contractAbi, await currentProvider.getSigner());
   }
 
-  async function loadInventory(registry) {
+  async function loadBloodBanks(registry) {
+    const bankAddresses = await registry.getBloodBanks();
+    setBloodBanks(Array.from(bankAddresses));
+  }
+
+  async function loadInventory(registry, currentRole, currentAccount) {
     const entries = await Promise.all(
-      bloodGroups.map(async (group) => [group, Number(await registry.getInventory(group))])
+      bloodGroups.map(async (group) => {
+        if (currentRole === "Blood Bank" && currentAccount) {
+          return [group, Number(await registry.getBloodBankInventory(currentAccount, group))];
+        }
+
+        return [group, Number(await registry.getInventory(group))];
+      })
     );
+
     setInventory(Object.fromEntries(entries));
   }
 
+  async function loadDonations(registry, currentRole, currentAccount) {
+    let loadedDonations = [];
+
+    if (currentRole === "Admin") {
+      loadedDonations = await registry.getAllDonations();
+    } else if (currentRole === "Donor" && currentAccount) {
+      loadedDonations = await registry.getDonationsByDonor(currentAccount);
+    } else {
+      setDonations([]);
+      setDonationAllocationsById({});
+      return;
+    }
+
+    const normalizedDonations = Array.from(loadedDonations).map(normalizeDonation);
+    setDonations(normalizedDonations);
+
+    const allocationEntries = await Promise.all(
+      normalizedDonations.map(async (donation) => {
+        const allocationRows = await registry.getDonationAllocations(donation.id);
+        return [donation.id.toString(), Array.from(allocationRows).map(normalizeAllocation)];
+      })
+    );
+
+    setDonationAllocationsById(Object.fromEntries(allocationEntries));
+  }
+
   async function loadActivity(registry) {
-    const [labUpdatedEvents, bloodBankUpdatedEvents, hospitalUpdatedEvents, inventoryEvents, patientEvents, labEvents, bloodBankEvents, hospitalEvents] = await Promise.all([
+    const [labUpdatedEvents, donorUpdatedEvents, bloodBankUpdatedEvents, hospitalUpdatedEvents, inventoryEvents, patientEvents, donationEvents, donationAllocatedEvents, donationReleasedEvents, labEvents, bloodBankEvents, hospitalEvents] = await Promise.all([
       registry.queryFilter(registry.filters.LabUpdated(), 0, "latest"),
+      registry.queryFilter(registry.filters.DonorUpdated(), 0, "latest"),
       registry.queryFilter(registry.filters.BloodBankUpdated(), 0, "latest"),
       registry.queryFilter(registry.filters.HospitalUpdated(), 0, "latest"),
       registry.queryFilter(registry.filters.InventoryUpdated(), 0, "latest"),
       registry.queryFilter(registry.filters.PatientRegistered(), 0, "latest"),
+      registry.queryFilter(registry.filters.DonationRecorded(), 0, "latest"),
+      registry.queryFilter(registry.filters.DonationAllocated(), 0, "latest"),
+      registry.queryFilter(registry.filters.DonationReleased(), 0, "latest"),
       registry.queryFilter(registry.filters.LabVerificationCompleted(), 0, "latest"),
       registry.queryFilter(registry.filters.BloodBankAvailabilityChecked(), 0, "latest"),
       registry.queryFilter(registry.filters.HospitalApprovalCompleted(), 0, "latest")
@@ -159,10 +256,14 @@ function App() {
 
     const activity = [
       ...labUpdatedEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Admin", title: "Lab access updated", requestId: "-", actor: event.args.lab, outcome: event.args.allowed ? "Lab enabled" : "Lab revoked", blockNumber: event.blockNumber, txHash: event.transactionHash })),
+      ...donorUpdatedEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Admin", title: "Donor access updated", requestId: "-", actor: event.args.donor, outcome: event.args.allowed ? "Donor enabled" : "Donor revoked", blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...bloodBankUpdatedEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Admin", title: "Blood bank access updated", requestId: "-", actor: event.args.bloodBank, outcome: event.args.allowed ? "Blood bank enabled" : "Blood bank revoked", blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...hospitalUpdatedEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Admin", title: "Hospital access updated", requestId: "-", actor: event.args.hospital, outcome: event.args.allowed ? "Hospital enabled" : "Hospital revoked", blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...inventoryEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Inventory", title: "Blood inventory updated", requestId: "-", actor: event.args.bloodBank, outcome: `${event.args.bloodGroup} -> ${event.args.unitsAvailable.toString()} units`, blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...patientEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Request", title: "Patient request created", requestId: event.args.requestId.toString(), actor: event.args.patient, outcome: `${event.args.bloodGroup} | ${event.args.unitsRequired.toString()} units`, blockNumber: event.blockNumber, txHash: event.transactionHash })),
+      ...donationEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Donation", title: "Donation recorded", requestId: "-", actor: event.args.donor, outcome: `${event.args.bloodGroup} | ${event.args.unitsDonated.toString()} units -> ${shortAddress(event.args.bloodBank)}`, blockNumber: event.blockNumber, txHash: event.transactionHash })),
+      ...donationAllocatedEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Allocation", title: "Donation allocated", requestId: event.args.requestId.toString(), actor: event.args.bloodBank, outcome: `Donation #${event.args.donationId.toString()} -> ${event.args.unitsAllocated.toString()} units`, blockNumber: event.blockNumber, txHash: event.transactionHash })),
+      ...donationReleasedEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Allocation", title: "Donation released", requestId: event.args.requestId.toString(), actor: event.args.bloodBank, outcome: `Donation #${event.args.donationId.toString()} restored by ${event.args.unitsReleased.toString()} units`, blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...labEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Lab", title: "Medical validity checked", requestId: event.args.requestId.toString(), actor: event.args.lab, outcome: event.args.approved ? "Verified" : "Rejected", blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...bloodBankEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Blood Bank", title: "Inventory availability checked", requestId: event.args.requestId.toString(), actor: event.args.bloodBank, outcome: event.args.available ? "Available" : "Not available", blockNumber: event.blockNumber, txHash: event.transactionHash })),
       ...hospitalEvents.map((event) => ({ id: `${event.transactionHash}-${event.index}`, stage: "Hospital", title: "Final hospital decision", requestId: event.args.requestId.toString(), actor: event.args.hospital, outcome: event.args.approved ? "Approved" : "Rejected", blockNumber: event.blockNumber, txHash: event.transactionHash }))
@@ -184,27 +285,41 @@ function App() {
     }
 
     const registry = await createRegistry(currentProvider);
-    const [owner, isLab, isBloodBank, isHospital, allRequests] = await Promise.all([
+    const [owner, isLab, isBloodBank, isHospital, isDonor, allRequests, allBloodBanks] = await Promise.all([
       registry.owner(),
       registry.isLab(normalized),
       registry.isBloodBank(normalized),
       registry.isHospital(normalized),
-      registry.getAllRequests()
+      registry.isDonor(normalized),
+      registry.getAllRequests(),
+      registry.getBloodBanks()
     ]);
 
     const isAdmin = ethers.getAddress(owner) === normalized;
     const isPatient = allRequests.some((request) => ethers.getAddress(request.patient) === normalized);
-    const currentRole = isAdmin ? "Admin" : isLab ? "Lab" : isBloodBank ? "Blood Bank" : isHospital ? "Hospital" : isPatient ? "Patient" : "Observer";
+    const currentRole = isAdmin ? "Admin" : isLab ? "Lab" : isBloodBank ? "Blood Bank" : isHospital ? "Hospital" : isDonor ? "Donor" : isPatient ? "Patient" : "Observer";
 
     setContract(registry);
     setRole(currentRole);
-    setRoleFlags({ isAdmin, isPatient, isLab, isBloodBank, isHospital });
+    setRoleFlags({ isAdmin, isDonor, isPatient, isLab, isBloodBank, isHospital });
     setRequests(allRequests);
+    setBloodBanks(Array.from(allBloodBanks));
     if (!rolePages[currentRole].includes(activePage)) {
-      navigateTo("overview", true);
+      navigateTo(rolePages[currentRole][0], true);
     }
 
-    await Promise.all([loadInventory(registry), loadActivity(registry)]);
+    if (currentRole === "Patient" || currentRole === "Donor") {
+      setInventory({});
+      setActivityLog([]);
+      await loadDonations(registry, currentRole, normalized);
+      return;
+    }
+
+    await Promise.all([
+      loadInventory(registry, currentRole, normalized),
+      loadActivity(registry),
+      loadDonations(registry, currentRole, normalized)
+    ]);
   }
 
   async function syncWalletState(message, explicitAccount) {
@@ -254,7 +369,7 @@ function App() {
   useEffect(() => {
     const onPopState = () => {
       const requestedPage = getPageFromPath(window.location.pathname);
-      const fallbackPage = availablePages.includes(requestedPage) ? requestedPage : "overview";
+      const fallbackPage = availablePages.includes(requestedPage) ? requestedPage : availablePages[0];
       setActivePage(fallbackPage);
       if (fallbackPage !== requestedPage) {
         window.history.replaceState({}, "", pagePaths[fallbackPage]);
@@ -279,16 +394,55 @@ function App() {
     setStatusMessage("Dashboard refreshed.");
   }
 
+  async function submitDonation(event) {
+    event.preventDefault();
+    try {
+      if (!donorForm.donorName.trim()) return setStatusMessage("Donor name is required.");
+      if (!donorForm.donationDate.trim()) return setStatusMessage("Donation date is required.");
+      if (!Number(donorForm.unitsDonated) || Number(donorForm.unitsDonated) < 1) return setStatusMessage("Units donated must be at least 1.");
+
+      const selectedBloodBank = bloodBanks[0];
+      if (!selectedBloodBank) return setStatusMessage("No blood bank is configured yet. Ask admin to enable a blood bank wallet.");
+
+      const registry = await getWriteContract();
+      const tx = await registry.donateBlood(
+        donorForm.donorName.trim(),
+        donorForm.bloodGroup,
+        Number(donorForm.unitsDonated),
+        donorForm.donationDate,
+        selectedBloodBank
+      );
+      setStatusMessage("Waiting for donation confirmation...");
+      await tx.wait();
+      setDonorForm(emptyDonorForm);
+      await refreshData();
+      setStatusMessage("Your donation has been recorded successfully.");
+    } catch (error) {
+      setStatusMessage(getErrorMessage(error));
+    }
+  }
+
   async function submitPatient(event) {
     event.preventDefault();
     try {
+      if (!patientForm.patientName.trim()) return setStatusMessage("Patient name is required.");
+      if (!patientForm.hospitalName.trim()) return setStatusMessage("Hospital name is required.");
+      if (!Number(patientForm.unitsRequired) || Number(patientForm.unitsRequired) < 1) return setStatusMessage("Units required must be at least 1.");
+
       const registry = await getWriteContract();
-      const tx = await registry.registerPatient(patientForm.patientName, Number(patientForm.age), patientForm.bloodGroup, Number(patientForm.unitsRequired), patientForm.contactReference, patientForm.medicalReference);
+      const tx = await registry.registerPatient(
+        patientForm.patientName.trim(),
+        0,
+        patientForm.bloodGroup,
+        Number(patientForm.unitsRequired),
+        patientForm.hospitalName.trim(),
+        `Urgency: ${patientForm.urgencyLevel}`
+      );
       setStatusMessage("Waiting for patient registration confirmation...");
       await tx.wait();
       setPatientForm(emptyPatientForm);
       await refreshData();
-      setStatusMessage("Patient request registered on-chain.");
+      setStatusMessage("Your request has been submitted successfully.");
     } catch (error) {
       setStatusMessage(getErrorMessage(error));
     }
@@ -649,7 +803,7 @@ function App() {
               </div>
             </div>
             <div className="activity-feed">
-              {activityLog.slice(0, 5).map((item) => (
+              {activityLog.slice(0, 7).map((item) => (
                 <div className="activity-item" key={item.id}>
                   <span className="activity-stage">{item.stage}</span>
                   <p>{item.title}</p>
@@ -667,27 +821,148 @@ function App() {
 
   function renderAdmin() {
     return (
-      <section className="content-grid two-up">
-        <article className="surface-card">
-          <div className="section-header"><div><p className="section-kicker">Role Governance</p><h2>Authorize ecosystem wallets</h2></div><span className="header-pill">Admin only</span></div>
-          <form onSubmit={(event) => { event.preventDefault(); }}>
-            <label>Lab wallet</label>
-            <input value={labForm.address} placeholder="0x..." onChange={(event) => setLabForm({ ...labForm, address: extractAddress(event.target.value) })} />
-            <select value={String(labForm.allowed)} onChange={(event) => setLabForm({ ...labForm, allowed: event.target.value === "true" })}><option value="true">Allow</option><option value="false">Revoke</option></select>
-            <button className="primary-button" type="button" disabled={role !== "Admin"} onClick={() => updateRoleAccess(labForm, setLabForm, (registry, target, allowed) => registry.setLab(target, allowed), "Lab")}>Update Lab Access</button>
-            <label>Blood bank wallet</label>
-            <input value={bloodBankRoleForm.address} placeholder="0x..." onChange={(event) => setBloodBankRoleForm({ ...bloodBankRoleForm, address: extractAddress(event.target.value) })} />
-            <select value={String(bloodBankRoleForm.allowed)} onChange={(event) => setBloodBankRoleForm({ ...bloodBankRoleForm, allowed: event.target.value === "true" })}><option value="true">Allow</option><option value="false">Revoke</option></select>
-            <button className="primary-button" type="button" disabled={role !== "Admin"} onClick={() => updateRoleAccess(bloodBankRoleForm, setBloodBankRoleForm, (registry, target, allowed) => registry.setBloodBank(target, allowed), "Blood Bank")}>Update Blood Bank Access</button>
-            <label>Hospital wallet</label>
-            <input value={hospitalForm.address} placeholder="0x..." onChange={(event) => setHospitalForm({ ...hospitalForm, address: extractAddress(event.target.value) })} />
-            <select value={String(hospitalForm.allowed)} onChange={(event) => setHospitalForm({ ...hospitalForm, allowed: event.target.value === "true" })}><option value="true">Allow</option><option value="false">Revoke</option></select>
-            <button className="primary-button" type="button" disabled={role !== "Admin"} onClick={() => updateRoleAccess(hospitalForm, setHospitalForm, (registry, target, allowed) => registry.setHospital(target, allowed), "Hospital")}>Update Hospital Access</button>
+      <section className="admin-stack">
+        <section className="content-grid two-up">
+          <article className="surface-card">
+            <div className="section-header"><div><p className="section-kicker">Role Governance</p><h2>Authorize ecosystem wallets</h2></div><span className="header-pill">Admin only</span></div>
+            <form onSubmit={(event) => { event.preventDefault(); }}>
+              <label>Lab wallet</label>
+              <input value={labForm.address} placeholder="0x..." onChange={(event) => setLabForm({ ...labForm, address: extractAddress(event.target.value) })} />
+              <select value={String(labForm.allowed)} onChange={(event) => setLabForm({ ...labForm, allowed: event.target.value === "true" })}><option value="true">Allow</option><option value="false">Revoke</option></select>
+              <button className="primary-button" type="button" disabled={role !== "Admin"} onClick={() => updateRoleAccess(labForm, setLabForm, (registry, target, allowed) => registry.setLab(target, allowed), "Lab")}>Update Lab Access</button>
+              <label>Donor wallet</label>
+              <input value={donorRoleForm.address} placeholder="0x..." onChange={(event) => setDonorRoleForm({ ...donorRoleForm, address: extractAddress(event.target.value) })} />
+              <select value={String(donorRoleForm.allowed)} onChange={(event) => setDonorRoleForm({ ...donorRoleForm, allowed: event.target.value === "true" })}><option value="true">Allow</option><option value="false">Revoke</option></select>
+              <button className="primary-button" type="button" disabled={role !== "Admin"} onClick={() => updateRoleAccess(donorRoleForm, setDonorRoleForm, (registry, target, allowed) => registry.setDonor(target, allowed), "Donor")}>Update Donor Access</button>
+              <label>Blood bank wallet</label>
+              <input value={bloodBankRoleForm.address} placeholder="0x..." onChange={(event) => setBloodBankRoleForm({ ...bloodBankRoleForm, address: extractAddress(event.target.value) })} />
+              <select value={String(bloodBankRoleForm.allowed)} onChange={(event) => setBloodBankRoleForm({ ...bloodBankRoleForm, allowed: event.target.value === "true" })}><option value="true">Allow</option><option value="false">Revoke</option></select>
+              <button className="primary-button" type="button" disabled={role !== "Admin"} onClick={() => updateRoleAccess(bloodBankRoleForm, setBloodBankRoleForm, (registry, target, allowed) => registry.setBloodBank(target, allowed), "Blood Bank")}>Update Blood Bank Access</button>
+              <label>Hospital wallet</label>
+              <input value={hospitalForm.address} placeholder="0x..." onChange={(event) => setHospitalForm({ ...hospitalForm, address: extractAddress(event.target.value) })} />
+              <select value={String(hospitalForm.allowed)} onChange={(event) => setHospitalForm({ ...hospitalForm, allowed: event.target.value === "true" })}><option value="true">Allow</option><option value="false">Revoke</option></select>
+              <button className="primary-button" type="button" disabled={role !== "Admin"} onClick={() => updateRoleAccess(hospitalForm, setHospitalForm, (registry, target, allowed) => registry.setHospital(target, allowed), "Hospital")}>Update Hospital Access</button>
+            </form>
+          </article>
+          <article className="surface-card">
+            <div className="section-header"><div><p className="section-kicker">Operational View</p><h2>System-wide inventory snapshot</h2></div><span className="header-pill">Admin only</span></div>
+            <div className="inventory-grid">{bloodGroups.map((group) => <article className="inventory-card" key={group}><span>{group}</span><strong>{inventory[group] ?? 0}</strong><small>units</small></article>)}</div>
+          </article>
+        </section>
+
+        <section className="surface-card full-width-card">
+          <div className="section-header"><div><p className="section-kicker">Donation Tracking</p><h2>Donor to patient traceability</h2></div><span className="header-pill">{donations.length} donation(s)</span></div>
+          {!donations.length ? (
+            <p className="empty-state">No donations recorded yet.</p>
+          ) : (
+            <div className="donation-tracking-grid">
+              <article className="donation-tracking-summary">
+                <div><span>Total donations</span><strong>{donations.length}</strong></div>
+                <div><span>Assigned</span><strong>{donations.filter((donation) => Number(donation.status) === 1).length}</strong></div>
+                <div><span>Used</span><strong>{donations.filter((donation) => Number(donation.status) === 2).length}</strong></div>
+              </article>
+              <article className="donation-tracking-summary">
+                {bloodGroups.map((group) => (
+                  <div key={group}>
+                    <span>{group}</span>
+                    <strong>{donations.filter((donation) => donation.bloodGroup === group).reduce((total, donation) => total + Number(donation.unitsDonated), 0)}</strong>
+                  </div>
+                ))}
+              </article>
+            </div>
+          )}
+
+          {donations.length ? (
+            <div className="record-grid donation-record-grid">
+              {donations.map((donation) => {
+                const allocations = donationAllocationsById[donation.id.toString()] || [];
+
+                return (
+                  <article className="record-card donation-record" key={donation.id.toString()}>
+                    <div className="record-head">
+                      <div>
+                        <p className="record-kicker">Donation #{donation.id.toString()}</p>
+                        <h3>{donation.donorName}</h3>
+                      </div>
+                      <span className="status-badge">{donationStatusLabel(donation.status)}</span>
+                    </div>
+                    <div className="record-meta">
+                      <span>{donation.bloodGroup}</span>
+                      <span>{donation.unitsDonated.toString()} unit(s)</span>
+                      <span>{shortAddress(donation.bloodBank)}</span>
+                    </div>
+                    <p>Donation date: {donation.donationDate}</p>
+                    <p>Available units: {donation.unitsAvailable.toString()}</p>
+                    <p>
+                      Linked requests: {allocations.length ? allocations.map((allocation) => `#${allocation.requestId.toString()} (${allocationStatusLabel(allocation)})`).join(", ") : "Not yet assigned"}
+                    </p>
+                    {allocations.length ? <p>Patients: {allocations.map((allocation) => shortAddress(allocation.patient)).join(", ")}</p> : null}
+                  </article>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+      </section>
+    );
+  }
+
+  function renderDonor() {
+    const autoAssignedBank = bloodBanks.length ? bloodBanks[0] : "";
+
+    return (
+      <section className="patient-focused-layout">
+        <article className="surface-card patient-primary-card">
+          <div className="section-header">
+            <div>
+              <p className="section-kicker">Donate Blood</p>
+              <h2>Submit a donation and we will route it to an active blood bank.</h2>
+            </div>
+            <span className="header-pill">Donor only</span>
+          </div>
+          <form onSubmit={submitDonation}>
+            <label>Donor Name</label>
+            <input value={donorForm.donorName} placeholder="Enter your name" onChange={(event) => setDonorForm({ ...donorForm, donorName: event.target.value })} />
+            <label>Blood Group</label>
+            <select value={donorForm.bloodGroup} onChange={(event) => setDonorForm({ ...donorForm, bloodGroup: event.target.value })}>{bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select>
+            <label>Units Donated</label>
+            <input value={donorForm.unitsDonated} type="number" min="1" placeholder="Donation units" onChange={(event) => setDonorForm({ ...donorForm, unitsDonated: event.target.value })} />
+            <label>Donation Date</label>
+            <input value={donorForm.donationDate} type="date" onChange={(event) => setDonorForm({ ...donorForm, donationDate: event.target.value })} />
+            <p className="patient-trace-copy">Auto-assigned blood bank: {autoAssignedBank ? shortAddress(autoAssignedBank) : "No active blood bank"}</p>
+            <button className="primary-button" type="submit" disabled={!contract}>Submit Donation</button>
           </form>
         </article>
-        <article className="surface-card">
-          <div className="section-header"><div><p className="section-kicker">Operational View</p><h2>System-wide inventory snapshot</h2></div><span className="header-pill">Admin only</span></div>
-          <div className="inventory-grid">{bloodGroups.map((group) => <article className="inventory-card" key={group}><span>{group}</span><strong>{inventory[group] ?? 0}</strong><small>units</small></article>)}</div>
+
+        <article className="surface-card patient-primary-card">
+          <div className="section-header">
+            <div>
+              <p className="section-kicker">My Donations</p>
+              <h2>Track your blood contributions</h2>
+            </div>
+            <span className="header-pill">{donations.length} donation(s)</span>
+          </div>
+          {!donations.length ? (
+            <p className="empty-state">No donations yet. Submit your first donation above.</p>
+          ) : (
+            <div className="patient-status-list">
+              {donations.map((donation) => {
+                const allocations = donationAllocationsById[donation.id.toString()] || [];
+
+                return (
+                  <article className="patient-status-item" key={donation.id.toString()}>
+                    <div>
+                      <p className="record-kicker">Donation #{donation.id.toString()}</p>
+                      <strong>{donation.bloodGroup} • {donation.unitsDonated.toString()} unit(s)</strong>
+                      <p className="patient-trace-copy">{donation.donationDate} • {shortAddress(donation.bloodBank)}</p>
+                      <p className="patient-trace-copy">{allocations.length ? allocations.map((allocation) => `#${allocation.requestId.toString()} (${allocationStatusLabel(allocation)})`).join(", ") : "Available in inventory"}</p>
+                    </div>
+                    <span className="status-badge">{donationStatusLabel(donation.status)}</span>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </article>
       </section>
     );
@@ -704,22 +979,57 @@ function App() {
 
   function renderPatient() {
     return (
-      <section className="content-grid two-up">
-        <article className="surface-card">
-          <div className="section-header"><div><p className="section-kicker">Patient Intake</p><h2>Create a new blood request</h2></div><span className="header-pill">Patient only</span></div>
+      <section className="patient-focused-layout">
+        <article className="surface-card patient-primary-card">
+          <div className="section-header">
+            <div>
+              <p className="section-kicker">Request Blood</p>
+              <h2>Submit a request for required blood type and quantity.</h2>
+            </div>
+            <span className="header-pill">Patient only</span>
+          </div>
           <form onSubmit={submitPatient}>
-            <label>Patient name</label><input value={patientForm.patientName} placeholder="Patient name" onChange={(event) => setPatientForm({ ...patientForm, patientName: event.target.value })} />
-            <label>Age</label><input value={patientForm.age} type="number" placeholder="Age" onChange={(event) => setPatientForm({ ...patientForm, age: event.target.value })} />
-            <label>Blood group</label><select value={patientForm.bloodGroup} onChange={(event) => setPatientForm({ ...patientForm, bloodGroup: event.target.value })}>{bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select>
-            <label>Units required</label><input value={patientForm.unitsRequired} type="number" placeholder="Units required" onChange={(event) => setPatientForm({ ...patientForm, unitsRequired: event.target.value })} />
-            <label>Contact reference</label><input value={patientForm.contactReference} placeholder="Contact reference" onChange={(event) => setPatientForm({ ...patientForm, contactReference: event.target.value })} />
-            <label>Medical reference</label><textarea value={patientForm.medicalReference} placeholder="Medical reference" onChange={(event) => setPatientForm({ ...patientForm, medicalReference: event.target.value })} />
-            <button className="primary-button" type="submit" disabled={!contract}>Create Request</button>
+            <label>Patient Name</label>
+            <input value={patientForm.patientName} placeholder="Enter your name" onChange={(event) => setPatientForm({ ...patientForm, patientName: event.target.value })} />
+            <label>Blood Group</label>
+            <select value={patientForm.bloodGroup} onChange={(event) => setPatientForm({ ...patientForm, bloodGroup: event.target.value })}>{bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select>
+            <label>Units Required</label>
+            <input value={patientForm.unitsRequired} type="number" min="1" placeholder="Required units" onChange={(event) => setPatientForm({ ...patientForm, unitsRequired: event.target.value })} />
+            <label>Hospital Name</label>
+            <input value={patientForm.hospitalName} placeholder="Hospital name" onChange={(event) => setPatientForm({ ...patientForm, hospitalName: event.target.value })} />
+            <label>Urgency Level</label>
+            <select value={patientForm.urgencyLevel} onChange={(event) => setPatientForm({ ...patientForm, urgencyLevel: event.target.value })}>
+              <option value="Normal">Normal</option>
+              <option value="Urgent">Urgent</option>
+              <option value="Critical">Critical</option>
+            </select>
+            <button className="primary-button" type="submit" disabled={!contract}>Submit Request</button>
           </form>
         </article>
-        <article className="surface-card">
-          <div className="section-header"><div><p className="section-kicker">My Requests</p><h2>Track your own lifecycle</h2></div><span className="header-pill">{derived.myRequests.length} request(s)</span></div>
-          {renderRequestCards(derived.myRequests, "This wallet has not created any requests yet.")}
+
+        <article className="surface-card patient-primary-card">
+          <div className="section-header">
+            <div>
+              <p className="section-kicker">My Requests</p>
+              <h2>View your request status</h2>
+            </div>
+            <span className="header-pill">{derived.myRequests.length} request(s)</span>
+          </div>
+          {!derived.myRequests.length ? (
+            <p className="empty-state">No requests yet. Submit your first request above.</p>
+          ) : (
+            <div className="patient-status-list">
+              {derived.myRequests.map((request) => (
+                <article className="patient-status-item" key={request.id.toString()}>
+                  <div>
+                    <p className="record-kicker">Request #{request.id.toString()}</p>
+                    <strong>{request.bloodGroup} • {request.unitsRequired.toString()} unit(s)</strong>
+                  </div>
+                  <span className="status-badge">{patientStatusLabel(request.status)}</span>
+                </article>
+              ))}
+            </div>
+          )}
         </article>
       </section>
     );
@@ -792,6 +1102,8 @@ function App() {
   }
 
   function renderPage() {
+    if (role === "Donor") return renderDonor();
+    if (role === "Patient") return renderPatient();
     if (activePage === "admin") return renderAdmin();
     if (activePage === "lifecycle") return renderLifecycle();
     if (activePage === "patient") return renderPatient();
@@ -822,34 +1134,43 @@ function App() {
           </div>
         </div>
         <div className="topbar-center">
-          {availablePages.map((pageId) => (
+          {role !== "Patient" && role !== "Donor" ? availablePages.map((pageId) => (
             <button className={`topbar-tab ${activePage === pageId ? "topbar-tab-active" : ""}`} key={pageId} onClick={() => navigateTo(pageId)} type="button">
               {pageTitle(pageId)}
             </button>
-          ))}
+          )) : null}
         </div>
         <div className="topbar-actions">
-          <span className="wallet-pill">Wallet {shortAddress(account)}</span>
+          <span className="wallet-pill">{account ? shortAddress(account) : "Wallet not connected"}</span>
           <span className="wallet-pill">{formatRole(role)}</span>
-          <span className="icon-pill">••</span>
+          {role !== "Patient" && role !== "Donor" ? <span className="icon-pill">••</span> : null}
           <button className="avatar-pill" onClick={connectWallet} type="button">{account ? "Reconnect Wallet" : "Connect"}</button>
         </div>
       </header>
 
       <main className="workspace">
         <header className="workspace-header">
-          <div><p className="section-kicker">Role Dashboard</p><h1>{pageMeta[activePage].label}</h1></div>
-          <div className="header-actions"><span className="network-chip">Local Hardhat</span><span className="contract-chip">{shortAddress(contractAddress)}</span><span className="status-inline">Wallet detected</span></div>
+          <div><p className="section-kicker">{role === "Patient" || role === "Donor" ? `${role} Portal` : "Role Dashboard"}</p><h1>{role === "Patient" ? "Request Blood" : role === "Donor" ? "Donate Blood" : pageMeta[activePage].label}</h1></div>
+          <div className="header-actions">
+            {role !== "Patient" && role !== "Donor" ? <span className="network-chip">Local Hardhat</span> : null}
+            {role !== "Patient" && role !== "Donor" ? <span className="contract-chip">{shortAddress(contractAddress)}</span> : null}
+            <span className="status-inline">{account ? "Wallet connected" : "Connect wallet"}</span>
+          </div>
         </header>
+        <article className="glass-card status-banner">
+          <p>{statusMessage}</p>
+        </article>
         {renderPage()}
       </main>
 
-      <div className="floating-actions glass-card">
-        <p className="section-kicker">Quick Actions</p>
-        <button className="fab-action" onClick={() => navigateTo("patient")} type="button">Create Request</button>
-        <button className="fab-action" onClick={() => navigateTo("lab")} type="button">Verify Request</button>
-        <button className="fab-action" onClick={() => navigateTo("hospital")} type="button">Approve Request</button>
-      </div>
+      {role !== "Patient" && role !== "Donor" ? (
+        <div className="floating-actions glass-card">
+          <p className="section-kicker">Quick Actions</p>
+          <button className="fab-action" onClick={() => navigateTo("patient")} type="button">Create Request</button>
+          <button className="fab-action" onClick={() => navigateTo("lab")} type="button">Verify Request</button>
+          <button className="fab-action" onClick={() => navigateTo("hospital")} type="button">Approve Request</button>
+        </div>
+      ) : null}
     </div>
   );
 }
