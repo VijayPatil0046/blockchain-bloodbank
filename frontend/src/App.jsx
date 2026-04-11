@@ -705,13 +705,6 @@ function App() {
   }
 
   function renderOverview() {
-    const walletStats = [
-      { label: "Total Requests", value: requests.length, tone: "warm" },
-      { label: "Pending Lab", value: derived.pendingLab.length, tone: "gold" },
-      { label: "Pending Blood Bank", value: derived.pendingBloodBank.length, tone: "mint" },
-      { label: "Pending Hospital", value: derived.pendingHospital.length, tone: "sky" }
-    ];
-
     return (
       <>
         <section className="bento-grid">
@@ -738,37 +731,6 @@ function App() {
                 <div><span>Approval Rate</span><strong>{requests.length ? `${Math.round((derived.approved.length / requests.length) * 100)}%` : "0%"}</strong></div>
               </div>
             </div>
-          </article>
-
-          <article className="glass-card wallet-smart-panel">
-            <div className="wallet-panel-top">
-              <div className="wallet-panel-heading">
-                <p className="section-kicker">Connected Wallet</p>
-                <h2>{shortAddress(account)}</h2>
-                <p className="wallet-panel-copy">{account || "Wallet not connected"}</p>
-              </div>
-              <button className="secondary-button subtle-button wallet-reconnect" onClick={connectWallet}>
-                Reconnect Wallet
-              </button>
-            </div>
-
-            <div className="wallet-panel-meta">
-              <span className="wallet-role-badge">{formatRole(role)}</span>
-              <span className="wallet-meta-note">Current role</span>
-            </div>
-
-            <div className="wallet-panel-divider" />
-
-            <div className="wallet-panel-stats">
-              {walletStats.map((card, index) => (
-                <article className={`wallet-stat-card tone-${card.tone}`} key={card.label} style={{ animationDelay: `${index * 70}ms` }}>
-                  <strong>{card.value}</strong>
-                  <span>{card.label}</span>
-                </article>
-              ))}
-            </div>
-
-            <div className="wallet-panel-footer">System synced • Last updated just now</div>
           </article>
 
           <article className="glass-card flow-card">
@@ -1141,21 +1103,18 @@ function App() {
           )) : null}
         </div>
         <div className="topbar-actions">
-          <span className="wallet-pill">{account ? shortAddress(account) : "Wallet not connected"}</span>
-          <span className="wallet-pill">{formatRole(role)}</span>
-          {role !== "Patient" && role !== "Donor" ? <span className="icon-pill">••</span> : null}
-          <button className="avatar-pill" onClick={connectWallet} type="button">{account ? "Reconnect Wallet" : "Connect"}</button>
+          <span className="wallet-role-pill">{formatRole(role)}</span>
+          <span className={`wallet-status-pill ${account ? "wallet-status-connected" : "wallet-status-disconnected"}`}>
+            <span className="wallet-status-dot" />
+            {account ? "Connected" : "Disconnected"}
+          </span>
+          <button className="avatar-pill wallet-compact-action" onClick={connectWallet} type="button">Reconnect Wallet</button>
         </div>
       </header>
 
       <main className="workspace">
         <header className="workspace-header">
           <div><p className="section-kicker">{role === "Patient" || role === "Donor" ? `${role} Portal` : "Role Dashboard"}</p><h1>{role === "Patient" ? "Request Blood" : role === "Donor" ? "Donate Blood" : pageMeta[activePage].label}</h1></div>
-          <div className="header-actions">
-            {role !== "Patient" && role !== "Donor" ? <span className="network-chip">Local Hardhat</span> : null}
-            {role !== "Patient" && role !== "Donor" ? <span className="contract-chip">{shortAddress(contractAddress)}</span> : null}
-            <span className="status-inline">{account ? "Wallet connected" : "Connect wallet"}</span>
-          </div>
         </header>
         <article className="glass-card status-banner">
           <p>{statusMessage}</p>
